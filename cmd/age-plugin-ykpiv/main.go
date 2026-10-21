@@ -218,6 +218,9 @@ func doGenerate(serial uint32, slot piv.Slot, useDefault, replace bool, output s
 	fmt.Fprintf(f, "# recipient: %s\n", r.String())
 	fmt.Fprintf(f, "%s\n", page.EncodeIdentity(ykpiv.Name, data))
 	fmt.Fprintf(os.Stderr, "generated: YubiKey %d slot %x, attested (firmware %d.%d.%d)\n", serial, slot.Key, a.Version.Major, a.Version.Minor, a.Version.Patch)
+	// piv-go disconnects with SCARD_LEAVE_CARD, so the management-key login
+	// outlives this process until the card is reset.
+	fmt.Fprintln(os.Stderr, "now UNPLUG and replug the YubiKey: that clears the management-key login from the card")
 	fmt.Println(r.String())
 	return nil
 }
