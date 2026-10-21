@@ -9,7 +9,6 @@ import (
 	sim "github.com/google/go-tpm-tools/simulator"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
-	"github.com/google/go-tpm/tpm2/transport/linuxtpm"
 	"github.com/google/go-tpm/tpmutil"
 )
 
@@ -49,11 +48,7 @@ func NewTPM(tpmPath string) (transport.TPMCloser, error) {
 		return GetFixedSim()
 	}
 
-	// If we don't pass a path to OpenTPM then we have the tpmrm0 and tpm0 fallbacks
-	if tpmPath != "" {
-		return linuxtpm.Open(tpmPath)
-	}
-	return linuxtpm.Open("/dev/tpmrm0")
+	return openDevice(tpmPath)
 }
 
 // shadow the unexported interface from go-tpm
