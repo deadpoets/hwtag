@@ -171,6 +171,12 @@ func LoadIdentity(tpm transport.TPMCloser, identity *Identity) (*tpm2.AuthHandle
 }
 
 func AcquireIdentitySRK(tpm transport.TPMCloser, identity *Identity) (*tpm2.AuthHandle, *tpm2.TPMTPublic, error) {
+	// Version 1 identities did not store the SRK name; version 2 did, and
+	// DecodeIdentity guarantees it is present for them.
+	if identity.Version != 1 && identity.SRKName == nil {
+		return nil, nil, fmt.Errorf("identity version %d has no SRK name", identity.Version)
+	}
+
 	// Try to use the shared persistent SRK for newer identities
 	if identity.Version > 1 {
 		srkHandle, srkPublic, err := getSharedSRK(tpm)
@@ -190,6 +196,9 @@ func AcquireIdentitySRK(tpm transport.TPMCloser, identity *Identity) (*tpm2.Auth
 		return srkHandle, srkPublic, nil
 	}
 
+	// Not the parent this identity was created under: don't leave the
+	// transient object loaded.
+	FlushHandle(tpm, srkHandle)
 	return nil, nil, fmt.Errorf("unable to acquire SRK matching name specified by identity")
 }
 

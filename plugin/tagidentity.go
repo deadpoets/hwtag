@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -25,18 +26,31 @@ func NewTPMTagIdentity(tpm transport.TPMCloser, pin func() ([]byte, error), iden
 var _ age.Identity = &TPMTagIdentity{}
 
 func (t *TPMTagIdentity) unwrap(block *age.Stanza) ([]byte, error) {
-	if len(block.Args) < 2 || block.Type != "p256tag" {
+	if block.Type != "p256tag" {
 		return nil, age.ErrIncorrectIdentity
+	}
+	// The same checks as age's reference p256tag identity: exactly two
+	// arguments, a 4-byte tag and a 65-byte uncompressed point. A stanza that
+	// fails them is malformed, not foreign. The body's length is left to the
+	// AEAD (age file keys are 16 bytes, but Wrap accepts any length).
+	if len(block.Args) != 2 {
+		return nil, fmt.Errorf("malformed stanza")
 	}
 
 	tag, err := b64Decode(block.Args[0])
 	if err != nil {
-		return nil, fmt.Errorf("failed base64 decode session key: %v", err)
+		return nil, fmt.Errorf("malformed tag: %v", err)
+	}
+	if len(tag) != 4 {
+		return nil, fmt.Errorf("invalid tag length: %d", len(tag))
 	}
 
 	sessionKey, err := b64Decode(block.Args[1])
 	if err != nil {
-		return nil, fmt.Errorf("failed base64 decode session key: %v", err)
+		return nil, fmt.Errorf("malformed encapsulated key: %v", err)
+	}
+	if len(sessionKey) != 65 {
+		return nil, fmt.Errorf("invalid encapsulated key length: %d", len(sessionKey))
 	}
 
 	rsp, err := t.identity.Recipient()
@@ -59,6 +73,10 @@ func (t *TPMTagIdentity) unwrap(block *age.Stanza) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get pin: %v", err)
 		}
+		// Work on our own copy and wipe it once the TPM has authorized the
+		// ECDH; the callback's slice stays the caller's (tests reuse it).
+		pin = bytes.Clone(pin)
+		defer clear(pin)
 	}
 
 	k, err := hpke.NewDHKEMPrivateKey(NewTPMKeyExchange(t.tpm, pin, t.identity))

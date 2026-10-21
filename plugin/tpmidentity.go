@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -26,18 +27,29 @@ func NewTPMIdentity(tpm transport.TPMCloser, pin func() ([]byte, error), identit
 var _ age.Identity = &TPMIdentity{}
 
 func (t *TPMIdentity) unwrap(block *age.Stanza) ([]byte, error) {
-	if len(block.Args) < 2 || block.Type != "tpm-ecc" {
+	if block.Type != "tpm-ecc" {
 		return nil, age.ErrIncorrectIdentity
+	}
+	// tpm-ecc stanzas were only ever written by this code: two arguments, a
+	// 4-byte tag and a 33-byte compressed point. The body is the AEAD's.
+	if len(block.Args) != 2 {
+		return nil, fmt.Errorf("malformed stanza")
 	}
 
 	tag, err := b64Decode(block.Args[0])
 	if err != nil {
-		return nil, fmt.Errorf("failed base64 decode session key: %v", err)
+		return nil, fmt.Errorf("malformed tag: %v", err)
+	}
+	if len(tag) != 4 {
+		return nil, fmt.Errorf("invalid tag length: %d", len(tag))
 	}
 
 	sessionKey, err := b64Decode(block.Args[1])
 	if err != nil {
-		return nil, fmt.Errorf("failed base64 decode session key: %v", err)
+		return nil, fmt.Errorf("malformed session key: %v", err)
+	}
+	if len(sessionKey) != 33 {
+		return nil, fmt.Errorf("invalid session key length: %d", len(sessionKey))
 	}
 
 	// The tpm-ecc recipient uses the checksum of the key, with the first 4 bytes
@@ -55,6 +67,8 @@ func (t *TPMIdentity) unwrap(block *age.Stanza) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get pin: %v", err)
 		}
+		pin = bytes.Clone(pin)
+		defer clear(pin)
 	}
 
 	p, err := nistec.NewP256Point().SetBytes(sessionKey)

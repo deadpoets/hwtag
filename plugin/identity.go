@@ -149,6 +149,15 @@ func DecodeIdentity(s string) (*Identity, error) {
 			return nil, err
 		}
 	}
+	// Versions: 1 (no SRK name) and 2 (SRK name appended). Anything else is
+	// not an identity this code wrote; version 0 in particular would reach
+	// the SRK lookup with no name to compare.
+	if key.Version != 1 && key.Version != 2 {
+		return nil, fmt.Errorf("unsupported identity version: %d", key.Version)
+	}
+	if key.PIN != NoPIN && key.PIN != HasPIN {
+		return nil, fmt.Errorf("invalid PIN status: %d", key.PIN)
+	}
 
 	public, err := tpm2.Unmarshal[tpm2.TPM2BPublic](r.Bytes())
 	if err != nil {
