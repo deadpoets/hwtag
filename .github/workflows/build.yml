@@ -22,7 +22,7 @@ jobs:
           - {GOOS: linux, GOARCH: amd64, ext: "", cmds: age-plugin-tpm}
           - {GOOS: linux, GOARCH: arm64, ext: "", cmds: age-plugin-tpm}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v5
