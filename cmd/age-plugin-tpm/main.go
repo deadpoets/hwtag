@@ -55,7 +55,11 @@ var (
 func SetLogger() {
 	var w io.Writer
 	if pluginOptions.LogFile != "" {
-		w, _ = os.Open(pluginOptions.LogFile)
+		f, err := os.OpenFile(pluginOptions.LogFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+		if err != nil {
+			log.Fatalf("--log-file: %v", err)
+		}
+		w = f
 	} else if os.Getenv("AGEDEBUG") != "" {
 		w = os.Stderr
 	} else {
@@ -98,7 +102,7 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 					return err
 				}
 
-				clearLine(os.Stdin)
+				clearLine(os.Stderr)
 
 				confirm, err := GetPin("Confirm pin:")
 				if err != nil {
@@ -107,6 +111,11 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 				if !bytes.Equal(pin, confirm) {
 					return fmt.Errorf("pins didn't match")
 				}
+			}
+			// CreateIdentity treats an empty PIN as "no PIN", which would
+			// silently give a --pin key no PIN at all.
+			if len(pin) == 0 {
+				return fmt.Errorf("--pin was given but the PIN is empty")
 			}
 		}
 		if pluginOptions.OutputFile != "" && pluginOptions.OutputFile != "-" {
@@ -214,7 +223,10 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			)
 			return i, nil
 		})
-		os.Exit(p.Main())
+		// os.Exit skips the deferred Close, so close the TPM context first.
+		code := p.Main()
+		tpm.Close()
+		os.Exit(code)
 	default:
 		tpm, err := plugin.NewTPM("")
 		if err != nil {
