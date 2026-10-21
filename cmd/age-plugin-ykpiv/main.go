@@ -32,6 +32,7 @@ func main() {
 	}
 	p.RegisterFlags(nil)
 	generate := flag.Bool("generate", false, "generate a new key on the YubiKey")
+	setup := flag.Bool("setup", false, "B1: reset PIV, generate the unseal key, set PIN and PUK, lock the management key (interactive)")
 	slotFlag := flag.String("slot", "82", "PIV slot, hex: 9d or 82-95")
 	serial := flag.Uint("serial", 0, "YubiKey serial (required when more than one is present)")
 	defaultMgmt := flag.Bool("default-mgmt-key", false, "use the factory management key (fresh keys only; B1 replaces it)")
@@ -63,6 +64,19 @@ func main() {
 	}
 
 	switch {
+	case *setup:
+		key, err := strconv.ParseUint(*slotFlag, 16, 8)
+		if err != nil {
+			fatal(fmt.Errorf("--slot: %v", err))
+		}
+		slot, err := ykpiv.SlotFor(uint32(key))
+		if err != nil {
+			fatal(err)
+		}
+		if *output == "" {
+			fatal(errors.New("--setup needs -o FILE"))
+		}
+		fatal(doSetup(uint32(*serial), slot, *output))
 	case *generate:
 		key, err := strconv.ParseUint(*slotFlag, 16, 8)
 		if err != nil {
@@ -167,43 +181,62 @@ func doGenerate(serial uint32, slot piv.Slot, useDefault, replace bool, output s
 	if err != nil {
 		return err
 	}
+	i, a, err := generateAttested(yk, serial, slot, mk)
+	if err != nil {
+		return err
+	}
+	if err := writeIdentity(f, i, a); err != nil {
+		return err
+	}
+	// piv-go disconnects with SCARD_LEAVE_CARD, so the management-key login
+	// outlives this process until the card is reset.
+	fmt.Fprintln(os.Stderr, "now UNPLUG and replug the YubiKey: that clears the management-key login from the card")
+	return nil
+}
+
+// generateAttested makes a P-256 key in slot with PIN and touch policy always,
+// and proves it was generated on this card with those policies: the slot's
+// attestation certificate must chain to Yubico's roots and carry the key now
+// in the slot.
+func generateAttested(yk *piv.YubiKey, serial uint32, slot piv.Slot, mk []byte) (*ykpiv.Identity, *piv.Attestation, error) {
 	if _, err := yk.GenerateKey(mk, slot, piv.Key{
 		Algorithm:   piv.AlgorithmEC256,
 		PINPolicy:   piv.PINPolicyAlways,
 		TouchPolicy: piv.TouchPolicyAlways,
 	}); err != nil {
-		return err
+		return nil, nil, err
 	}
-
-	// Prove the key was generated on this card with these policies: the slot's
-	// attestation certificate must chain to Yubico's roots.
 	ac, err := yk.AttestationCertificate()
 	if err != nil {
-		return fmt.Errorf("attestation certificate: %v", err)
+		return nil, nil, fmt.Errorf("attestation certificate: %v", err)
 	}
 	sc, err := yk.Attest(slot)
 	if err != nil {
-		return fmt.Errorf("attest slot: %v", err)
+		return nil, nil, fmt.Errorf("attest slot: %v", err)
 	}
 	a, err := piv.Verify(ac, sc)
 	if err != nil {
-		return fmt.Errorf("attestation does not verify: %v", err)
+		return nil, nil, fmt.Errorf("attestation does not verify: %v", err)
 	}
 	if a.Serial != serial || a.TouchPolicy != piv.TouchPolicyAlways || a.PINPolicy != piv.PINPolicyAlways {
-		return fmt.Errorf("attestation mismatch: serial %d, touch %v, pin %v", a.Serial, a.TouchPolicy, a.PINPolicy)
+		return nil, nil, fmt.Errorf("attestation mismatch: serial %d, touch %v, pin %v", a.Serial, a.TouchPolicy, a.PINPolicy)
 	}
 	ki, err := yk.KeyInfo(slot)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if kp := marshalPub(ki.PublicKey); len(kp) == 0 || !bytes.Equal(kp, marshalPub(sc.PublicKey)) {
-		return errors.New("attested key differs from the slot's key")
+		return nil, nil, errors.New("attested key differs from the slot's key")
 	}
 	pub, err := ecdsaToECDH(sc.PublicKey)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	i := &ykpiv.Identity{Serial: serial, Slot: slot, Pub: pub}
+	return &ykpiv.Identity{Serial: serial, Slot: slot, Pub: pub}, a, nil
+}
+
+// writeIdentity writes the identity file and prints the recipient on stdout.
+func writeIdentity(f *os.File, i *ykpiv.Identity, a *piv.Attestation) error {
 	data, err := i.Marshal()
 	if err != nil {
 		return err
@@ -213,14 +246,16 @@ func doGenerate(serial uint32, slot piv.Slot, useDefault, replace bool, output s
 		return err
 	}
 	fmt.Fprintf(f, "# created: %s\n", time.Now().UTC().Format(time.RFC3339))
-	fmt.Fprintf(f, "# yubikey: serial %d, firmware %d.%d.%d, slot %x\n", serial, a.Version.Major, a.Version.Minor, a.Version.Patch, slot.Key)
+	fmt.Fprintf(f, "# yubikey: serial %d, firmware %d.%d.%d, slot %x\n", i.Serial, a.Version.Major, a.Version.Minor, a.Version.Patch, i.Slot.Key)
 	fmt.Fprintf(f, "# policy: pin always, touch always (attested by Yubico)\n")
 	fmt.Fprintf(f, "# recipient: %s\n", r.String())
-	fmt.Fprintf(f, "%s\n", page.EncodeIdentity(ykpiv.Name, data))
-	fmt.Fprintf(os.Stderr, "generated: YubiKey %d slot %x, attested (firmware %d.%d.%d)\n", serial, slot.Key, a.Version.Major, a.Version.Minor, a.Version.Patch)
-	// piv-go disconnects with SCARD_LEAVE_CARD, so the management-key login
-	// outlives this process until the card is reset.
-	fmt.Fprintln(os.Stderr, "now UNPLUG and replug the YubiKey: that clears the management-key login from the card")
+	if _, err := fmt.Fprintf(f, "%s\n", page.EncodeIdentity(ykpiv.Name, data)); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "generated: YubiKey %d slot %x, attested (firmware %d.%d.%d)\n", i.Serial, i.Slot.Key, a.Version.Major, a.Version.Minor, a.Version.Patch)
 	fmt.Println(r.String())
 	return nil
 }
