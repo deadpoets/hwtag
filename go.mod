@@ -1,6 +1,8 @@
-module github.com/foxboron/age-plugin-tpm
+module github.com/deadpoets/hwtag
 
 go 1.25.0
+
+toolchain go1.27.3
 
 require (
 	filippo.io/age v1.3.0

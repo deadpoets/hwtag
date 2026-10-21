@@ -20,7 +20,7 @@ import (
 
 	"filippo.io/age"
 	page "filippo.io/age/plugin"
-	"github.com/foxboron/age-plugin-tpm/ykpiv"
+	"github.com/deadpoets/hwtag/ykpiv"
 	"github.com/go-piv/piv-go/v2/piv"
 	"golang.org/x/term"
 )

@@ -9,7 +9,7 @@ import (
 
 	"filippo.io/age"
 	page "filippo.io/age/plugin"
-	"github.com/foxboron/age-plugin-tpm/plugin"
+	"github.com/deadpoets/hwtag/plugin"
 	"github.com/google/go-tpm/tpm2/transport/simulator"
 	"github.com/spf13/cobra"
 )

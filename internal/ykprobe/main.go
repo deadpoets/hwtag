@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/foxboron/age-plugin-tpm/ykpiv"
+	"github.com/deadpoets/hwtag/ykpiv"
 )
 
 func main() {

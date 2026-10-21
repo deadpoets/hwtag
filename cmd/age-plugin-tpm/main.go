@@ -10,7 +10,7 @@ import (
 	"filippo.io/age"
 	page "filippo.io/age/plugin"
 	"filippo.io/age/tag"
-	"github.com/foxboron/age-plugin-tpm/plugin"
+	"github.com/deadpoets/hwtag/plugin"
 	"github.com/google/go-tpm/tpm2/transport"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
