@@ -54,7 +54,9 @@ Releases carry pre-built binaries with sha256 sums: `age-plugin-tpm` for
 Windows and Linux (amd64, arm64) and `age-plugin-ykpiv` for Windows, where it
 needs no cgo. They are built with `CGO_ENABLED=0 -trimpath -buildvcs=false`
 and the toolchain pinned in `go.mod`, so building a tag yourself gives the
-same bytes. The binaries must be on `PATH` for age to find them.
+same bytes (add `-ldflags "-X main.version=<tag>"`, which the release build
+uses to stamp the version). The binaries must be on `PATH` for age to find
+them.
 
 ## age-plugin-tpm
 
