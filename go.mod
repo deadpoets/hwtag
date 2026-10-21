@@ -1,6 +1,6 @@
 module github.com/deadpoets/hwtag
 
-go 1.25.0
+go 1.26
 
 toolchain go1.27.3
 
@@ -10,7 +10,7 @@ require (
 	filippo.io/nistec v0.0.4
 	github.com/go-piv/piv-go/v2 v2.6.0
 	github.com/google/go-tpm v0.9.8
-	github.com/google/go-tpm-tools v0.4.7
+	github.com/google/go-tpm-tools v0.4.11
 	github.com/rogpeppe/go-internal v1.16.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.55.0
