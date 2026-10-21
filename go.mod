@@ -11,7 +11,7 @@ require (
 	github.com/go-piv/piv-go/v2 v2.6.0
 	github.com/google/go-tpm v0.9.7
 	github.com/google/go-tpm-tools v0.4.7
-	github.com/rogpeppe/go-internal v1.14.1
+	github.com/rogpeppe/go-internal v1.16.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.50.0
 	golang.org/x/term v0.42.0
