@@ -191,10 +191,15 @@ func OpenCard(serial uint32) (*piv.YubiKey, error) {
 		return nil, fmt.Errorf("listing smart cards: %v", err)
 	}
 	var found *piv.YubiKey
+	var lastErr error
 	n := 0
 	for _, c := range cards {
 		yk, err := piv.Open(c)
 		if err != nil {
+			// Non-YubiKey readers fail here too, so this is only a hint,
+			// but "sharing violation" is the answer when another process
+			// holds the card.
+			lastErr = fmt.Errorf("%s: %v", c, err)
 			continue
 		}
 		s, err := yk.Serial()
@@ -209,6 +214,8 @@ func OpenCard(serial uint32) (*piv.YubiKey, error) {
 		found = yk
 	}
 	switch {
+	case found == nil && lastErr != nil:
+		return nil, fmt.Errorf("no YubiKey could be opened (is another program using it?): %v", lastErr)
 	case found == nil && serial != 0:
 		return nil, fmt.Errorf("YubiKey with serial %d not found; is it plugged in?", serial)
 	case found == nil:

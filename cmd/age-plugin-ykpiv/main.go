@@ -157,11 +157,11 @@ func managementKey(useDefault bool) ([]byte, error) {
 }
 
 func doGenerate(serial uint32, slot piv.Slot, useDefault, replace bool, output string) error {
-	f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
+	// Refuse an existing file now, but create it only once the card is done,
+	// so an abandoned run leaves nothing behind (as --setup does).
+	if _, err := os.Stat(output); err == nil {
+		return fmt.Errorf("%s already exists", output)
 	}
-	defer f.Close()
 
 	yk, err := ykpiv.OpenCard(serial)
 	if err != nil {
@@ -185,6 +185,11 @@ func doGenerate(serial uint32, slot piv.Slot, useDefault, replace bool, output s
 	if err != nil {
 		return err
 	}
+	f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 	if err := writeIdentity(f, i, a); err != nil {
 		return err
 	}

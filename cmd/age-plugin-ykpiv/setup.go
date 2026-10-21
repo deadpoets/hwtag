@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -56,8 +55,11 @@ func doSetup(serial uint32, slot piv.Slot, output string) error {
 	fmt.Fprintf(os.Stderr, "\nThis RESETS the PIV application on YubiKey %d (firmware %d.%d.%d).\n", serial, v.Major, v.Minor, v.Patch)
 	fmt.Fprintln(os.Stderr, "Every PIV key and certificate on it is erased. FIDO/WebAuthn, OTP and the other applications are not touched.")
 	fmt.Fprintf(os.Stderr, "Type   reset %d   to continue: ", serial)
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	if strings.TrimSpace(line) != fmt.Sprintf("reset %d", serial) {
+	// fmt reads os.Stdin a byte at a time, so nothing typed ahead is swallowed
+	// before the PIN prompts, which read the terminal directly.
+	var word, num string
+	fmt.Fscanln(os.Stdin, &word, &num)
+	if word+" "+num != fmt.Sprintf("reset %d", serial) {
 		return errors.New("not confirmed; nothing changed")
 	}
 
