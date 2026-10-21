@@ -6,6 +6,7 @@ require (
 	filippo.io/age v1.3.0
 	filippo.io/hpke v0.4.0
 	filippo.io/nistec v0.0.4
+	github.com/go-piv/piv-go/v2 v2.6.0
 	github.com/google/go-tpm v0.9.7
 	github.com/google/go-tpm-tools v0.4.7
 	github.com/rogpeppe/go-internal v1.14.1
@@ -15,7 +16,6 @@ require (
 )
 
 require (
-	github.com/go-piv/piv-go/v2 v2.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	golang.org/x/sys v0.43.0 // indirect
