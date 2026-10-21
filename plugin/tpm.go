@@ -2,49 +2,13 @@ package plugin
 
 import (
 	"crypto/ecdh"
-	"io"
-	"os"
-	"sync"
-
-	sim "github.com/google/go-tpm-tools/simulator"
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport"
-	"github.com/google/go-tpm/tpmutil"
 )
-
-var (
-	once sync.Once
-	s    transport.TPMCloser
-)
-
-// TPM represents a connection to a TPM simulator.
-type TPMCloser struct {
-	transport io.ReadWriteCloser
-}
-
-// Send implements the TPM interface.
-func (t *TPMCloser) Send(input []byte) ([]byte, error) {
-	return tpmutil.RunCommandRaw(t.transport, input)
-}
-
-// Close implements the TPM interface.
-func (t *TPMCloser) Close() error {
-	return t.transport.Close()
-}
-
-func GetFixedSim() (transport.TPMCloser, error) {
-	var ss *sim.Simulator
-	var err error
-	once.Do(func() {
-		ss, err = sim.GetWithFixedSeedInsecure(123456)
-		s = &TPMCloser{ss}
-	})
-	return s, err
-}
 
 // Setup a NewTPMDevice
 func NewTPM(tpmPath string) (transport.TPMCloser, error) {
-	if os.Getenv("_AGE_TPM_SIMULATOR") != "" {
+	if useSimulator() {
 		return GetFixedSim()
 	}
 

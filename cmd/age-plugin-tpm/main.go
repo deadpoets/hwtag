@@ -85,8 +85,13 @@ func RunCli(cmd *cobra.Command, tpm transport.TPMCloser, in io.Reader, out io.Wr
 	case pluginOptions.Generate:
 
 		if pluginOptions.PIN {
-			if s := os.Getenv("AGE_TPM_PIN"); s != "" {
-				pin = []byte(s)
+			var envPIN string
+			envPIN, err = plugin.EnvPIN()
+			if err != nil {
+				return err
+			}
+			if envPIN != "" {
+				pin = []byte(envPIN)
 			} else {
 				pin, err = GetPin("Enter pin for key:")
 				if err != nil {
@@ -193,7 +198,9 @@ func RunPlugin(cmd *cobra.Command, args []string) error {
 			i.Callbacks(p, tpm,
 				func() ([]byte, error) {
 					var pin []byte
-					if s := os.Getenv("AGE_TPM_PIN"); s != "" {
+					if s, err := plugin.EnvPIN(); err != nil {
+						return nil, err
+					} else if s != "" {
 						pin = []byte(s)
 					} else {
 						ps, err := p.RequestValue("Please enter the PIN for the key:", true)
@@ -236,7 +243,7 @@ func pluginFlags(cmd *cobra.Command, opts *PluginOptions) {
 	flags.StringVarP(&pluginOptions.OutputFile, "output", "o", "", "Write the result to the file.")
 
 	flags.BoolVarP(&pluginOptions.Generate, "generate", "g", false, "Generate a identity.")
-	flags.BoolVarP(&pluginOptions.PIN, "pin", "p", false, "Include a pin with the key. Alternatively export AGE_TPM_PIN.")
+	flags.BoolVarP(&pluginOptions.PIN, "pin", "p", false, "Include a pin with the key.")
 
 	// Debug or logging stuff
 	flags.StringVar(&pluginOptions.LogFile, "log-file", "", "Logging file for debug output")

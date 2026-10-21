@@ -1,3 +1,5 @@
+//go:build agetpmsim
+
 package main
 
 import (
