@@ -48,8 +48,16 @@ func (t *TPMKeyExchange) ECDH(remoteKey *ecdh.PublicKey) ([]byte, error) {
 	}
 	defer FlushHandle(t.tpm, handle.Handle)
 
-	// Add the AuthSession for the handle
-	handle.Auth = tpm2.PasswordAuth(t.pin)
+	// Authorize the key with an HMAC session that knows the PIN, salted to the
+	// SRK and with response encryption. A password session (TPM_RS_PW) would
+	// put the PIN itself in the command's authorization area, in the clear on
+	// the TPM bus; the HMAC session proves the PIN without sending it, and
+	// encrypts the shared secret coming back. A wrong PIN still fails with
+	// TPM_RC_AUTH_FAIL and counts toward the dictionary-attack lockout.
+	handle.Auth = tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
+		tpm2.Auth(t.pin),
+		tpm2.AESEncryption(128, tpm2.EncryptOut),
+		tpm2.Salted(srkHandle.Handle, *srkPublic))
 
 	p, err := nistec.NewP256Point().SetBytes(remoteKey.Bytes())
 	if err != nil {
@@ -70,13 +78,10 @@ func (t *TPMKeyExchange) ECDH(remoteKey *ecdh.PublicKey) ([]byte, error) {
 		),
 	}
 
-	// Execute the ECDHZGen command, we also add session encryption.
-	// In this case the session encryption only encrypts the private part going out of the TPM, which is the shared
-	// session key we are using in our kdf.
-	ecdhRsp, err := ecdh.Execute(t.tpm,
-		tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
-			tpm2.AESEncryption(128, tpm2.EncryptOut),
-			tpm2.Salted(srkHandle.Handle, *srkPublic)))
+	// Execute the ECDHZGen command. The auth session above also encrypts the
+	// private part going out of the TPM, which is the shared secret we feed
+	// to the KDF.
+	ecdhRsp, err := ecdh.Execute(t.tpm)
 	if err != nil {
 		return nil, fmt.Errorf("failed ecdhzgen: %v", err)
 	}
