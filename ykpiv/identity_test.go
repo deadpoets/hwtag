@@ -10,7 +10,7 @@ import (
 	"github.com/go-piv/piv-go/v2/piv"
 )
 
-func newIdentity(t *testing.T) *Identity {
+func newIdentity(t testing.TB) *Identity {
 	t.Helper()
 	k, err := ecdh.P256().GenerateKey(rand.Reader)
 	if err != nil {
@@ -20,7 +20,7 @@ func newIdentity(t *testing.T) *Identity {
 	return &Identity{Serial: 38788548, Slot: slot, Pub: k.PublicKey()}
 }
 
-func wrapTo(t *testing.T, i *Identity) []*age.Stanza {
+func wrapTo(t testing.TB, i *Identity) []*age.Stanza {
 	t.Helper()
 	r, err := i.Recipient()
 	if err != nil {
