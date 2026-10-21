@@ -1,18 +1,25 @@
-
 all: build
 
-build: age-plugin-tpm
+# Production binaries: no cgo, reproducible.
+build:
+	CGO_ENABLED=0 go build -trimpath -buildvcs=false ./cmd/age-plugin-tpm ./cmd/age-plugin-ykpiv
 
-age-plugin-tpm:
-	go build -o age-plugin-tpm ./cmd/age-plugin-tpm
-
-.PHONY: age-plugin-tpm
-
+# The TPM simulator needs cgo and a C compiler.
 test:
-	go test ./...
+	CGO_ENABLED=1 go test -race -tags agetpmsim ./...
+	CGO_ENABLED=0 go test ./plugin ./ykpiv
 
 check:
-	staticcheck ./...
 	go vet ./...
+	GOOS=windows go vet ./...
+	test -z "$$(gofmt -l .)"
+	go run honnef.co/go/tools/cmd/staticcheck@latest ./...
 
-.PHONY: test
+fuzz:
+	go test -run '^$$' -fuzz FuzzDecodeIdentity -fuzztime 30s ./plugin
+	go test -run '^$$' -fuzz FuzzParseTPMRecipient -fuzztime 30s ./plugin
+	go test -run '^$$' -fuzz FuzzUnwrapStanza -fuzztime 30s ./plugin
+	go test -run '^$$' -fuzz FuzzUnmarshal -fuzztime 30s ./ykpiv
+	go test -run '^$$' -fuzz FuzzUnwrap -fuzztime 30s ./ykpiv
+
+.PHONY: all build test check fuzz

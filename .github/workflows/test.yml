@@ -1,34 +1,55 @@
-name: Go tests
+name: Tests
 on: [push, pull_request]
 permissions:
   contents: read
 jobs:
   test:
-    name: Test
-    strategy:
-      fail-fast: false
-      matrix:
-        go: [1.x]
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    name: Test (TPM simulator)
+    runs-on: ubuntu-latest
     steps:
-      - name: Install Go ${{ matrix.go }}
-        uses: actions/setup-go@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - name: add stefanberger/swtpm-jammy
-        run: sudo add-apt-repository ppa:stefanberger/swtpm-jammy
-      - name: Install swtpm and age
-        run: sudo apt-get install -y swtpm-tools age
-      - name: Run tests
-        run: go test -race ./...
-      - name: Run go vet
-        run: go vet ./...
+          go-version-file: go.mod
+      - name: Install pcsclite (piv-go needs it on Linux)
+        run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev
+      - name: Tests with the simulator and the race detector
+        run: CGO_ENABLED=1 go test -race -tags agetpmsim ./...
+      - name: Tests as the production build sees them (no simulator, no cgo)
+        run: CGO_ENABLED=0 go test ./plugin ./ykpiv
+      - name: Fuzz seeds and corpus
+        run: CGO_ENABLED=0 go test -run '^Fuzz' ./plugin ./ykpiv
+      - name: go vet (linux, windows)
+        run: |
+          go vet ./...
+          GOOS=windows go vet ./...
+          CGO_ENABLED=1 go vet -tags agetpmsim ./...
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
       - name: staticcheck
-        uses: dominikh/staticcheck-action@v1.3.1
+        run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+      - name: govulncheck
+        run: |
+          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+          GOOS=windows go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+  cross:
+    name: Cross-build (no cgo)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {GOOS: windows, GOARCH: amd64, pkgs: ./cmd/age-plugin-tpm ./cmd/age-plugin-ykpiv}
+          - {GOOS: windows, GOARCH: arm64, pkgs: ./cmd/age-plugin-tpm ./cmd/age-plugin-ykpiv}
+          - {GOOS: linux, GOARCH: amd64, pkgs: ./cmd/age-plugin-tpm}
+          - {GOOS: linux, GOARCH: arm64, pkgs: ./cmd/age-plugin-tpm}
+          - {GOOS: darwin, GOARCH: arm64, pkgs: ./cmd/age-plugin-tpm}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          install-go: false
+          go-version-file: go.mod
+      - run: go build -trimpath -buildvcs=false -o /dev/null ${{ matrix.pkgs }}
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.GOOS }}
+          GOARCH: ${{ matrix.GOARCH }}

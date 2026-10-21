@@ -1,4 +1,7 @@
-name: Build and upload binaries
+name: Release binaries
+# Reproducible: CGO_ENABLED=0 -trimpath -buildvcs=false with the toolchain
+# pinned in go.mod. Building the same tag anywhere gives the same bytes, and
+# the sha256 sums are attached to the release so anyone can check.
 on:
   release:
     types: [published]
@@ -8,59 +11,53 @@ permissions:
   contents: read
 jobs:
   build:
-    name: Build binaries
+    name: Build
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - {PLATFORM: linux-amd64, GOOS: linux, GOARCH: amd64}
-          - {PLATFORM: linux-armv6, GOOS: linux, GOARCH: arm, GOARM: 6}
-          - {PLATFORM: linux-arm64, GOOS: linux, GOARCH: arm64}
+          - {GOOS: windows, GOARCH: amd64, ext: .exe, cmds: age-plugin-tpm age-plugin-ykpiv}
+          - {GOOS: windows, GOARCH: arm64, ext: .exe, cmds: age-plugin-tpm age-plugin-ykpiv}
+          - {GOOS: linux, GOARCH: amd64, ext: "", cmds: age-plugin-tpm}
+          - {GOOS: linux, GOARCH: arm64, ext: "", cmds: age-plugin-tpm}
     steps:
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.x
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Build binary
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
         run: |
-          cp LICENSE "$RUNNER_TEMP/LICENSE"
-          echo -e "\n---\n" >> "$RUNNER_TEMP/LICENSE"
-          curl -L "https://go.dev/LICENSE?m=text" >> "$RUNNER_TEMP/LICENSE"
-          VERSION="$(git describe --tags)"
-          DIR="$(mktemp -d)"
-          mkdir "$DIR/age-plugin-tpm"
-          cp "$RUNNER_TEMP/LICENSE" "$DIR/age-plugin-tpm"
-          go build -o "$DIR/age-plugin-tpm" -ldflags "-X main.version=$VERSION" -trimpath ./cmd/...
-          tar -cvzf "age-plugin-tpm-$VERSION-$GOOS-$GOARCH.tar.gz" -C "$DIR" age-plugin-tpm
+          VERSION="$(git describe --tags --always)"
+          mkdir -p out
+          for cmd in ${{ matrix.cmds }}; do
+            go build -trimpath -buildvcs=false -ldflags "-X main.version=$VERSION" \
+              -o "out/$cmd-$VERSION-$GOOS-$GOARCH${{ matrix.ext }}" "./cmd/$cmd"
+          done
+          cp LICENSE out/
+          (cd out && sha256sum * > "sha256sums-$GOOS-$GOARCH.txt" && cat "sha256sums-$GOOS-$GOARCH.txt")
         env:
           CGO_ENABLED: 0
           GOOS: ${{ matrix.GOOS }}
           GOARCH: ${{ matrix.GOARCH }}
-          GOARM: ${{ matrix.GOARM }}
-      - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: age-plugin-tpm-binaries-${{ matrix.PLATFORM }}
-          path: age-plugin-tpm-*
+          name: hwtag-${{ matrix.GOOS }}-${{ matrix.GOARCH }}
+          path: out/*
   upload:
-    name: Upload release binaries
+    name: Upload release assets
     if: github.event_name == 'release'
     needs: build
     permissions:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - name: Download workflow artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          pattern: age-plugin-tpm-binaries-*
+          pattern: hwtag-*
           merge-multiple: true
-      - name: Upload release artifacts
-        run: gh release upload "$GITHUB_REF_NAME" age-plugin-tpm-*
+      - run: gh release upload "$GITHUB_REF_NAME" age-plugin-* sha256sums-*
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}

@@ -1,74 +1,129 @@
-TPM plugin for age clients
-==========================
+hwtag: age plugins for hardware-backed tagged recipients
+========================================================
 
-`age-plugin-tpm` is a plugin for [age](https://age-encryption.org/v1) clients
-like [`age`](https://age-encryption.org) and [`rage`](https://str4d.xyz/rage),
-which enables files to be encrypted to age identities sealed by the TPM.
+Two [age](https://age-encryption.org) plugins that decrypt files encrypted to
+native `age1tag1…` recipients ([p256tag](https://c2sp.org/age#the-tagged-recipient-types),
+age ≥ 1.3) with a P-256 key that never leaves a piece of hardware:
 
-# Features
+| Binary | Key lives in | Platforms |
+|---|---|---|
+| `age-plugin-tpm` | a TPM 2.0 (key wrapped by the TPM's storage root key) | Linux (`/dev/tpmrm0`), **Windows (TBS)** |
+| `age-plugin-ykpiv` | a YubiKey PIV slot, PIN and touch policy *always*, attested at generation | Windows (pure Go), Linux/macOS (cgo, pcsclite) |
 
-* Keys created on the TPM, sealed outside of it
-* PIN support
-* TPM session encryption
+Encryption needs no plugin: `age -r age1tag1…` does it with stock age. Only
+decryption runs through these binaries, and then the only operation the
+hardware performs is one ECDH.
 
-## Installation
+## Origin
 
-The simplest way of installing this plugin is by running the follow go command.
+hwtag is an independent fork of [age-plugin-tpm](https://github.com/Foxboron/age-plugin-tpm)
+by Morten Linderud (Foxboron), MIT, from v1.0.1. The git history keeps every
+upstream commit. Upstream does not support this fork: **please do not report
+problems with hwtag to upstream**, and do not expect fixes here to appear
+there. Fixes from upstream are pulled into hwtag one way as they appear.
 
-`go install github.com/foxboron/age-plugin-tpm/cmd/age-plugin-tpm@latest`
+What hwtag adds on top of v1.0.1:
 
-Alternatively download the [pre-built binaries](https://github.com/foxboron/age-plugin-tpm/releases).
+- Windows support for the TPM plugin, through the TPM Base Services (TBS).
+- `age-plugin-ykpiv`: the same p256tag recipient type with a YubiKey PIV key.
+- The TPM PIN is proven to the TPM with an HMAC session instead of being sent
+  in a password session (where it travels in the clear on the TPM bus).
+- The TPM simulator and the `AGE_TPM_PIN` variable exist only in test builds
+  (`-tags agetpmsim`). A production binary refuses `AGE_TPM_PIN`.
+- Stricter identity and stanza parsing, fuzz tests, and a number of smaller
+  fixes (see the git log).
 
-# Usage
+## Install
 
-```bash
-# Create identity
-$ age-plugin-tpm --generate -o age-identity.txt
-$ age-plugin-tpm -y age-identity.txt > age-recipient.txt
-
-# Encrypt / Decrypt something
-$ echo 'Hack The Planet!' | age -R age-recipient.txt -o test-decrypt.txt
-$ age --decrypt -i age-identity.txt -o - test-decrypt.txt
-Hack The Planet!
-```
-
-You can add `--pin` when calling `--generate` to require a PIN when encrypting or decrypting.
-
-### When used non-interactively
-
-If you want to use a `--pin` non-interactively, you can use the `AGE_TPM_PIN` environment variable.
-Please be aware that environment variables are not secure, and can be read from `/proc/$PID/environ`.
-
-```bash
-# Create identity
-$ AGE_TPM_PIN=1234 age-plugin-tpm --generate --pin -o age-identity.txt
-$ age-plugin-tpm -y age-identity.txt > age-recipient.txt
-
-# Encrypt / Decrypt something
-$ echo 'Hack The Planet!' | age -R age-recipient.txt -o test-decrypt.txt
-$ AGE_TPM_PIN=1234 age --decrypt -i age-identity.txt -o - test-decrypt.txt
-Hack The Planet!
-```
-
-## Commands
-
-An age identity can be created with:
+Pre-built binaries, with sha256 sums, are on the releases page. They are built
+with `CGO_ENABLED=0 -trimpath -buildvcs=false` and a pinned Go toolchain, so
+building the tag yourself produces byte-identical binaries (Windows and Linux
+amd64/arm64 for `age-plugin-tpm`; Windows for `age-plugin-ykpiv`, which needs
+cgo and `libpcsclite` elsewhere).
 
 ```
-$ age-plugin-tpm --generate -o - | tee age-identity.txt
-# Created: 2025-12-25 01:54:45.690315451 +0100 CET m=+0.011592629
-# Recipient: age1tag1q096edfp3ty6n36fj5kyq0yuesp7rdcmm7sjswzdcrekh6ash8n3uys987t
-
-AGE-PLUGIN-TPM-1QGQQQKQQYVQQKQQZQPEQQQQQZQQPJQQTQQPSQYQQYR96EDFP3TY6N36FJ5KYQ0YUESP7RDCMM7SJSWZDCREKH6ASH8N3UQPQYE4FZAPQXA3HRLELET3KX2EDSWDRF2ET4DWMTN0AWMKHUPQ8EK8SQLSQYQYMY5ZVWQYDY5D7WZ0W6KEXDWNUAP00DEVQ76AJ7HVV85TWU0DFCQQS0DA7N7E8GN55U6E4G8ECFFNRTP7XJTHD440N3CZW6STXNWQGA89WF3NF3PEDPUAPC8AW5XNZW68E4QG7X85G2CM5TZDKAP2UZ9EEAAC5LQ0R9PJEX5280SG0U47HA09EAFQ6VSVX65HCGRGNQQ3QQZL5H2W3M34CMSTWMRXLR90YRDZPZKWGZK7H7E079KLCCSSVRLFMQYEY547R
+go install github.com/deadpoets/hwtag/cmd/age-plugin-tpm@latest
+go install github.com/deadpoets/hwtag/cmd/age-plugin-ykpiv@latest
 ```
 
-To display the recipient of a given identity:
+The binaries must be on `PATH` for age to find them.
+
+## age-plugin-tpm
 
 ```
-$ age-plugin-tpm -y age-identity.txt
-age1tag1q096edfp3ty6n36fj5kyq0yuesp7rdcmm7sjswzdcrekh6ash8n3uys987t
+age-plugin-tpm --generate --pin -o tpm-identity.txt   # new key; PIN typed twice, never echoed
+age-plugin-tpm -y tpm-identity.txt                    # print the age1tag1… recipient
+age -r age1tag1… -o secret.age secret                 # encrypt with stock age
+age -d -i tpm-identity.txt secret.age                 # decrypt: asks for the PIN
+```
+
+The identity file holds the key wrapped by the TPM: it is useless on any
+other TPM, but keep it, there is no way to recover it from the TPM.
+
+A wrong PIN is refused by the TPM (`TPM_RC_AUTH_FAIL`) and counts toward
+its dictionary-attack lockout. **On Windows, TBS additionally locks a
+standard (non-elevated) user out after 4 authorization failures**, for the
+"standard user lockout duration" (8 hours by default), for every TPM key
+of that user, PIN-less ones included. Budget wrong-PIN attempts accordingly.
+
+On Windows the plugin uses the persistent storage root key Windows provisions
+at `0x81000001` as the parent, so a TPM clear (`tpm.msc`) destroys every
+identity made on that machine.
+
+## age-plugin-ykpiv
+
+```
+age-plugin-ykpiv --setup -o yk-identity.txt      # interactive: PIV reset, new key, PIN, PUK, random management key
+age-plugin-ykpiv --generate --slot 82 -o yk-identity.txt   # just a new key in a slot (management key asked for)
+age-plugin-ykpiv -y yk-identity.txt              # print the recipient
+age -d -i yk-identity.txt secret.age             # decrypt: PIN, then touch when it blinks
+```
+
+The identity file holds no secret (serial, slot, public key). The key is
+generated on the card with PIN policy *always* and touch policy *always*,
+and the plugin verifies that by Yubico's attestation at generation and by
+the slot's metadata at every decryption; a key that does not match is
+refused. Firmware 5.4 or newer.
+
+`--setup` takes a fresh or reused YubiKey to one unseal identity: it resets
+the PIV application (FIDO/WebAuthn and OTP are untouched), generates the
+key, sets the PIN and PUK you type, and replaces the management key with 24
+random bytes that are neither shown nor stored, so nothing in PIV can be
+changed again without a reset, which destroys the key. Store the PUK offline.
+
+Windows resets a smart-card connection left idle for about five seconds, so
+the PIN is asked for *before* the card is opened; open, verify and ECDH then
+run back to back. The card is held exclusively while the plugin runs. The
+PIV security state outlives the process on Windows (piv-go disconnects
+without a reset), which is why the policies are *always*; unplug and replug
+the key after `--setup` or `--generate`.
+
+## Security notes
+
+- Both plugins check the stanza's 4-byte tag before touching any hardware or
+  asking for a PIN, so a file for someone else's key never prompts.
+- The TPM plugin authorizes the key with an HMAC session salted to the SRK,
+  with response encryption: the PIN is never transmitted and the shared
+  secret is encrypted on the bus.
+- PINs are read through the age plugin protocol (so the age client sees
+  them too, by design), live in process memory for the life of one
+  short-lived plugin process, and the working copies are wiped after use.
+- Nothing is ever taken from the environment or `argv`: not PINs, not the
+  management key.
+- Tested with the Microsoft TPM 2.0 reference simulator (go-tpm-tools), with
+  fuzzing of every parser, and on real hardware: Intel PTT on Windows 11 and
+  a YubiKey 5 (firmware 5.7).
+
+## Building and testing
+
+```
+go build ./cmd/...                                   # production binaries (no cgo)
+CGO_ENABLED=1 go test -race -tags agetpmsim ./...    # with the TPM simulator (needs a C compiler)
+GOOS=windows go vet ./...
+go test -run '^$' -fuzz FuzzDecodeIdentity ./plugin  # and the other Fuzz* targets
 ```
 
 ## License
 
-Licensed under the MIT license. See [LICENSE](LICENSE) or http://opensource.org/licenses/MIT
+MIT. See [LICENSE](LICENSE): the original age-plugin-tpm notice is kept, with
+a second line for the hwtag additions.
