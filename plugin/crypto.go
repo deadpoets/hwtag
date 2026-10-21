@@ -3,12 +3,9 @@ package plugin
 import (
 	"crypto/cipher"
 	"crypto/ecdh"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"io"
-	"math/big"
 
 	"filippo.io/nistec"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -87,16 +84,6 @@ func EncryptFileKey(fileKey []byte, pubkey *ecdh.PublicKey) ([]byte, []byte, err
 	// Return the bytes, and the marshalled compressed bytes of the session public
 	// key.
 	return b, MarshalCompressedEC(sessionPubKey), nil
-}
-
-// Unmarshal a compressed ec key
-func UnmarshalCompressedEC(b []byte) (*big.Int, *big.Int, *ecdh.PublicKey, error) {
-	x, y := elliptic.UnmarshalCompressed(elliptic.P256(), b)
-	ec := ecdsa.PublicKey{
-		Curve: elliptic.P256(), X: x, Y: y,
-	}
-	key, err := ec.ECDH()
-	return x, y, key, err
 }
 
 // Marshal a compressed EC key
