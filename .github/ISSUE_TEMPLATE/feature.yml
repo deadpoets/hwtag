@@ -1,0 +1,9 @@
+name: Feature request
+description: A change to discuss before any code is written
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes: {label: The problem, description: "What you cannot do today."}
+    validations: {required: true}
+  - type: textarea
+    attributes: {label: The change you have in mind, description: "Note: identity and stanza formats are frozen; a new one needs a version byte and a migration."}

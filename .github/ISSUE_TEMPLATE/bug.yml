@@ -1,0 +1,15 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: input
+    attributes: {label: hwtag version or commit}
+    validations: {required: true}
+  - type: input
+    attributes: {label: OS, hardware (TPM model or YubiKey firmware), age version}
+    validations: {required: true}
+  - type: textarea
+    attributes: {label: What you did, and what happened, description: "Commands and output. Never paste a PIN, an identity file's AGE-PLUGIN line, or a decrypted file."}
+    validations: {required: true}
+  - type: textarea
+    attributes: {label: What you expected}
