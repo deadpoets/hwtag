@@ -6,8 +6,10 @@ import "filippo.io/hpke/crypto/ecdh"
 
 // KeyExchanger wraps a hardware ECDH key and remembers every shared secret it
 // hands to HPKE, so that the caller can wipe them once the HPKE context is
-// set up. HPKE uses the ECDH output only to derive its key schedule and does
-// not keep it; the copies HPKE derives from it are out of our reach.
+// set up. HPKE reads the ECDH output only while deriving its key schedule, so
+// wiping it afterwards is safe, but this removes one copy, not the last:
+// hpke's labeledExtract copies the value verbatim into a buffer it never
+// wipes, and that copy and everything derived from it are out of our reach.
 type KeyExchanger struct {
 	ecdh.KeyExchanger
 	out [][]byte
