@@ -21,6 +21,12 @@ move in step.
 - Both p256tag unwrap paths wipe the ECDH shared secret once the HPKE context
   is set up, and the TPM path drops the shared point's Y coordinate.
 
+### Fixed
+- `age-plugin-ykpiv` could not decrypt a file encrypted to several p256tag
+  recipients (such as a TPM and a YubiKey) unless the YubiKey's stanza came
+  first: `ykpiv.Identity.Unwrap` gave up at the first stanza for another key
+  instead of skipping it. Present since 1.1.0.
+
 ## [1.1.0] - 2026-10-21
 
 The first hwtag release, forked from age-plugin-tpm v1.0.1.
