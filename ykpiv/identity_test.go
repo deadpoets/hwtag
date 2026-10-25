@@ -1,6 +1,7 @@
 package ykpiv
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/rand"
 	"errors"
@@ -93,6 +94,34 @@ func TestUnwrapOwnStanzaPromptsBeforeCard(t *testing.T) {
 	i.PIN = func() (string, error) { asked = true; return "", stop }
 	if _, err := i.Unwrap(wrapTo(t, i)); !errors.Is(err, stop) || !asked {
 		t.Fatalf("got %v (asked=%v), want the PIN prompt's error", err, asked)
+	}
+}
+
+// UnwrapInto checks the buffer before the PIN prompt, and leaves it alone on
+// any error. The card path itself needs hardware.
+func TestUnwrapIntoBeforeCard(t *testing.T) {
+	i, other := newIdentity(t), newIdentity(t)
+	i.PIN = func() (string, error) { t.Fatal("PIN requested"); return "", nil }
+	for _, n := range []int{0, 15, 17, 32} {
+		if err := i.UnwrapInto(make([]byte, n), wrapTo(t, i)); err == nil {
+			t.Errorf("%d-byte buffer accepted", n)
+		}
+	}
+	dst := bytes.Repeat([]byte{0xaa}, 16)
+	if err := i.UnwrapInto(dst, wrapTo(t, other)); !errors.Is(err, age.ErrIncorrectIdentity) {
+		t.Fatalf("got %v, want ErrIncorrectIdentity", err)
+	}
+	if !bytes.Equal(dst, bytes.Repeat([]byte{0xaa}, 16)) {
+		t.Fatal("dst written on error")
+	}
+
+	stop := errors.New("stop before card")
+	i.PIN = func() (string, error) { return "", stop }
+	if err := i.UnwrapInto(dst, wrapTo(t, i)); !errors.Is(err, stop) {
+		t.Fatalf("got %v, want the PIN prompt's error", err)
+	}
+	if !bytes.Equal(dst, bytes.Repeat([]byte{0xaa}, 16)) {
+		t.Fatal("dst written on error")
 	}
 }
 

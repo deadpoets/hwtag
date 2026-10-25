@@ -141,6 +141,22 @@ make fuzz           # the five fuzz targets, 30 s each
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
+## Go API and versioning
+
+The binaries are the product, but the packages `github.com/deadpoets/hwtag/plugin`
+and `github.com/deadpoets/hwtag/ykpiv` can be imported. Their exported API is
+covered by the Go v1 compatibility promise from v1.1.0 on: minor releases only
+add, and an exported name that has to change gets a replacement and a
+deprecation notice, never a new signature. `internal/` and `cmd/` are not part
+of it. The identity and stanza formats are stable independently of the Go API.
+
+Tags older than v1.1.0 (v1.0.1 and before) are upstream age-plugin-tpm's and
+belong to the module `github.com/foxboron/age-plugin-tpm`, not this one.
+
+`ykpiv` exposes types from `github.com/go-piv/piv-go/v2` (such as
+`Identity.Slot`); replacing them would need a `/v2` module, so hwtag adds no
+further piv-go types to its exported API.
+
 ## License
 
 MIT. [LICENSE](LICENSE) keeps the original age-plugin-tpm notice and adds a

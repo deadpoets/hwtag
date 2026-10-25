@@ -9,6 +9,7 @@ import (
 	"filippo.io/age"
 	"filippo.io/age/tag"
 	"filippo.io/hpke"
+	"github.com/deadpoets/hwtag/internal/wipe"
 	"github.com/google/go-tpm/tpm2/transport"
 )
 
@@ -79,11 +80,15 @@ func (t *TPMTagIdentity) unwrap(block *age.Stanza) ([]byte, error) {
 		defer clear(pin)
 	}
 
-	k, err := hpke.NewDHKEMPrivateKey(NewTPMKeyExchange(t.tpm, pin, t.identity))
+	// The ECDH runs inside NewRecipient; wipe its output as soon as the HPKE
+	// context exists.
+	kx := &wipe.KeyExchanger{KeyExchanger: NewTPMKeyExchange(t.tpm, pin, t.identity)}
+	k, err := hpke.NewDHKEMPrivateKey(kx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unwrap file key: %v", err)
 	}
 	r, err := hpke.NewRecipient(sessionKey, k, hpke.HKDFSHA256(), hpke.ChaCha20Poly1305(), []byte("age-encryption.org/p256tag"))
+	kx.Wipe()
 	if err != nil {
 		return nil, fmt.Errorf("failed to unwrap file key: %v", err)
 	}
@@ -102,6 +107,28 @@ func (t *TPMTagIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 		return fileKey, nil
 	}
 	return nil, age.ErrIncorrectIdentity
+}
+
+// UnwrapInto is Unwrap for callers that keep the file key in memory they
+// manage themselves, such as a locked buffer. dst must be exactly 16 bytes,
+// the age file key size; that is checked before the TPM is touched or a PIN
+// is asked for. On success the key is in dst and hwtag's own copies of it and
+// of the ECDH shared secret have been wiped; on error dst is left as it was.
+//
+// This narrows the time the key spends on the Go heap; it does not close it.
+// Copies made inside go-tpm, hpke and the Go runtime are out of reach.
+func (t *TPMTagIdentity) UnwrapInto(dst []byte, stanzas []*age.Stanza) error {
+	if len(dst) != wipe.FileKeySize {
+		return fmt.Errorf("file key buffer is %d bytes, want %d", len(dst), wipe.FileKeySize)
+	}
+	fileKey, err := t.Unwrap(stanzas)
+	if err != nil {
+		return err
+	}
+	if !wipe.Into(dst, fileKey) {
+		return errors.New("stanza holds a file key of unexpected size")
+	}
+	return nil
 }
 
 func (t *TPMTagIdentity) Recipient() *tag.Recipient {

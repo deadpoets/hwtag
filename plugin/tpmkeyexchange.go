@@ -91,5 +91,7 @@ func (t *TPMKeyExchange) ECDH(remoteKey *ecdh.PublicKey) ([]byte, error) {
 		return nil, fmt.Errorf("failed getting ecdh point: %v", err)
 	}
 
+	// Only X is the shared secret; Y follows from it, so don't leave it about.
+	clear(shared.Y.Buffer)
 	return shared.X.Buffer, nil
 }
