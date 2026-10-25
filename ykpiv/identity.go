@@ -20,6 +20,7 @@ import (
 	"filippo.io/age/tag"
 	"filippo.io/hpke"
 	"filippo.io/nistec"
+	"github.com/deadpoets/hwtag/internal/wipe"
 	"github.com/go-piv/piv-go/v2/piv"
 )
 
@@ -170,17 +171,44 @@ func (i *Identity) Unwrap(ss []*age.Stanza) ([]byte, error) {
 			return nil, err
 		}
 		defer kx.yk.Close()
-		k, err := hpke.NewDHKEMPrivateKey(kx)
+		// The ECDH runs inside NewRecipient; wipe its output as soon as the
+		// HPKE context exists.
+		wkx := &wipe.KeyExchanger{KeyExchanger: kx}
+		k, err := hpke.NewDHKEMPrivateKey(wkx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unwrap file key: %v", err)
 		}
 		r, err := hpke.NewRecipient(enc, k, hpke.HKDFSHA256(), hpke.ChaCha20Poly1305(), []byte("age-encryption.org/p256tag"))
+		wkx.Wipe()
 		if err != nil {
 			return nil, fmt.Errorf("failed to unwrap file key: %v", err)
 		}
 		return r.Open(nil, s.Body)
 	}
 	return nil, age.ErrIncorrectIdentity
+}
+
+// UnwrapInto is Unwrap for callers that keep the file key in memory they
+// manage themselves, such as a locked buffer. dst must be exactly 16 bytes,
+// the age file key size; that is checked before the card is opened or a PIN
+// is asked for. On success the key is in dst and hwtag's own copies of it and
+// of the ECDH shared secret have been wiped; on error dst is left as it was.
+//
+// This narrows the time the key spends on the Go heap; it does not close it.
+// Copies made inside piv-go, hpke and the Go runtime are out of reach, and the
+// PIN is a string end to end (age's plugin protocol and piv-go both take one).
+func (i *Identity) UnwrapInto(dst []byte, ss []*age.Stanza) error {
+	if len(dst) != wipe.FileKeySize {
+		return fmt.Errorf("file key buffer is %d bytes, want %d", len(dst), wipe.FileKeySize)
+	}
+	fileKey, err := i.Unwrap(ss)
+	if err != nil {
+		return err
+	}
+	if !wipe.Into(dst, fileKey) {
+		return errors.New("stanza holds a file key of unexpected size")
+	}
+	return nil
 }
 
 // OpenCard opens the YubiKey with the given serial. With serial 0 exactly one

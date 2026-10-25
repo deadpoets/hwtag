@@ -8,10 +8,17 @@ Added
   touch policy always, attested at generation and checked at every use;
   `--setup` for a fresh key with PIN, PUK and a random management key.
 - Fuzz tests for the identity, recipient and stanza parsers.
+- `UnwrapInto(dst, stanzas)` on the p256tag identities (`plugin.TPMTagIdentity`,
+  `ykpiv.Identity`), for callers that hold the file key in memory they manage:
+  the key goes only to `dst` (checked to be 16 bytes before any PIN prompt),
+  and hwtag's own copies are wiped. Copies inside go-tpm, piv-go, hpke and the
+  Go runtime are out of reach.
 
 Changed
 - The TPM key is authorized with an HMAC session (PIN proven, not sent)
   instead of a password session.
+- Both p256tag unwrap paths wipe the ECDH shared secret once the HPKE context
+  is set up, and the TPM path drops the shared point's Y coordinate.
 - The TPM simulator and `AGE_TPM_PIN` exist only in test builds
   (`-tags agetpmsim`); a production binary refuses `AGE_TPM_PIN`.
 - Identity parsing accepts only versions 1 and 2; p256tag and tpm-ecc stanza
