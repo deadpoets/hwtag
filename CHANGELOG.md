@@ -10,6 +10,8 @@ move in step.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-25
+
 ### Added
 - `UnwrapInto(dst, stanzas)` on the p256tag identities (`plugin.TPMTagIdentity`,
   `ykpiv.Identity`), for callers that hold the file key in memory they manage:
@@ -20,6 +22,10 @@ move in step.
 ### Changed
 - Both p256tag unwrap paths wipe the ECDH shared secret once the HPKE context
   is set up, and the TPM path drops the shared point's Y coordinate.
+- Pins unchanged since 1.1.0: `go 1.26.0`, toolchain go1.27.3,
+  golang.org/x/crypto v0.58.0, golang.org/x/sys v0.49.0,
+  github.com/google/go-tpm v0.9.8, github.com/google/go-tpm-tools v0.4.11,
+  filippo.io/age v1.3.2.
 
 ### Fixed
 - `age-plugin-ykpiv` could not decrypt a file encrypted to several p256tag
@@ -59,5 +65,6 @@ The first hwtag release, forked from age-plugin-tpm v1.0.1.
 - `--log-file` was opened read-only and never logged.
 - The PIN prompt's clear-line escape was written to stdin.
 
-[Unreleased]: https://github.com/deadpoets/hwtag/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/deadpoets/hwtag/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/deadpoets/hwtag/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/deadpoets/hwtag/releases/tag/v1.1.0
