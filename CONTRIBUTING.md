@@ -53,6 +53,37 @@ on the same terms as any other: you must understand what you submit, have
 tested it, and stand behind it under the DCO. The review is of the change,
 not of how it was written.
 
+## Releasing (maintainer)
+
+Releases are cut only with the script, never by hand:
+
+```
+bash .github/scripts/release.sh --check v1.2.0   # every gate, nothing changed
+bash .github/scripts/release.sh v1.2.0           # gates, two confirmations, tag, publish
+```
+
+A published version is permanent: the Go module proxy and checksum database
+never forget it, and since v1.1.0 the exported API of `plugin` and `ykpiv` is
+under the v1 compatibility promise. So the script refuses to tag unless the
+checkout is a clean `main` equal to `origin/main`; the version is unused in
+git and on proxy.golang.org; `gorelease` accepts it against the latest
+published version (additions need a minor version, and incompatible changes
+are refused outright); `go.mod`'s toolchain is the newest Go release and the
+machine runs it; every CI check on the commit passed; the simulator tests
+pass and every release target builds locally; and `CHANGELOG.md` has a
+non-empty `## [X.Y.Z]` section, which becomes the release notes.
+
+It then asks the person at the terminal to confirm, by typing the commit
+hash, that this commit's binaries ran on a real TPM and a real YubiKey, and
+once more before tagging. There is no switch to skip either question. It
+creates a signed tag, verifies it, pushes it and publishes the GitHub Release,
+which makes `build.yml` attach the binaries and their sha256 sums.
+
+The order is: changelog PR (move `[Unreleased]` to `[X.Y.Z] - date`) →
+merge → hardware run → `release.sh`. Because the script's own check asks the
+proxy about the version first, the new version may take about 30 minutes to
+resolve through proxy.golang.org.
+
 ## Pulling from upstream
 
 hwtag tracks [Foxboron/age-plugin-tpm](https://github.com/Foxboron/age-plugin-tpm)
