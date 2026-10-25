@@ -5,6 +5,10 @@
 #   release.sh --check v1.2.0   run every gate, change nothing, stop before any prompt
 #   release.sh v1.2.0           run every gate, then ask, tag, push and publish
 #
+# Exit status: 0 published (or, with --check, every gate passed); 1 a gate or
+# step failed; 2 a confirmation was declined. In every non-zero case nothing
+# was pushed.
+#
 # Run it from anywhere in a checkout of main. Nothing is tagged or pushed until
 # every gate below has passed and a human at a terminal has confirmed twice:
 # once that this exact commit has been run on real hardware, once to tag.
@@ -29,6 +33,9 @@ set -euo pipefail
 
 die() { printf '\n  REFUSING: %s\n\n' "$1" >&2; exit 1; }
 ok()  { printf '  ok    %s\n' "$1"; }
+# A declined confirmation is not a release, so it must not exit 0: a wrapper
+# has to be able to tell the two apart. 2 keeps it distinct from a failed gate.
+declined() { printf '\n  %s; nothing changed\n\n' "$1" >&2; exit 2; }
 
 check_only=0
 if [ "${1:-}" = "--check" ]; then
@@ -39,10 +46,13 @@ fi
 version="$1"
 tag="$version"
 
-case "$version" in
-  v[0-9]*.[0-9]*.[0-9]*) ;;
-  *) die "version must look like v1.2.3 (or v1.2.3-rc.1), got: $version" ;;
-esac
+# Semantic version with an optional pre-release suffix, and nothing else: a
+# glob like v[0-9]*.[0-9]*.[0-9]* would let v1.2.3junk through to the proxy
+# probe and the tag name. Build metadata (+...) is refused because the proxy
+# ignores it.
+semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+[[ "$version" =~ $semver ]] ||
+  die "version must look like v1.2.3 (or v1.2.3-rc.1), got: $version"
 
 cd "$(git rev-parse --show-toplevel)"
 module=$(go list -m)
@@ -199,7 +209,12 @@ CGO_ENABLED=1 go test -race -tags agetpmsim -count=1 ./... >"$report" 2>&1 || {
   grep -vE 'warning:|note:|^ +\||^ +[0-9]+ \||In file included|^ +from ' "$report" >&2
   die "go test with the simulator failed (above)."
 }
-CGO_ENABLED=0 go test -count=1 ./plugin >"$report" 2>&1 || { cat "$report" >&2; die "go test without cgo failed."; }
+# The production build has no cgo, so test that way too. ykpiv is pure Go
+# only on Windows; on Linux and macOS piv-go links libpcsclite through cgo.
+nocgo="./plugin ./internal/..."
+[ "$(go env GOOS)" = "windows" ] && nocgo="$nocgo ./ykpiv"
+# shellcheck disable=SC2086 # nocgo is a list of package patterns
+CGO_ENABLED=0 go test -count=1 $nocgo >"$report" 2>&1 || { cat "$report" >&2; die "go test without cgo failed."; }
 ok "tests pass"
 
 printf '  ...   building every release target\n'
@@ -281,12 +296,12 @@ cat >/dev/tty <<EOF
 
 EOF
 read -r -p "  type the commit ($short) to confirm the hardware run: " reply </dev/tty
-[ "$reply" = "$short" ] || { printf '\n  not confirmed; nothing changed\n\n'; exit 0; }
+[ "$reply" = "$short" ] || declined "hardware run not confirmed"
 
 read -r -p "  create and push tag $tag? [y/N] " reply </dev/tty
 case "$reply" in
   [yY]) ;;
-  *) printf '\n  aborted, nothing changed\n\n'; exit 0 ;;
+  *) declined "tag not confirmed" ;;
 esac
 
 # Signed and annotated, like v1.1.0. -s rather than -a, so the signature does
