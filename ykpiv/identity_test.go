@@ -85,6 +85,21 @@ func TestUnwrapForeignStanzaNoPrompt(t *testing.T) {
 	}
 }
 
+// A file encrypted to several p256tag recipients (a TPM and this YubiKey, say)
+// carries one stanza each, in recipient order. Someone else's stanza must be
+// skipped, not end the search, or the YubiKey can only decrypt files where it
+// was the first recipient.
+func TestUnwrapSkipsForeignStanzaBeforeOurs(t *testing.T) {
+	ours, theirs := newIdentity(t), newIdentity(t)
+	stop := errors.New("stop before card")
+	asked := false
+	ours.PIN = func() (string, error) { asked = true; return "", stop }
+	ss := append(wrapTo(t, theirs), wrapTo(t, ours)...)
+	if _, err := ours.Unwrap(ss); !errors.Is(err, stop) || !asked {
+		t.Fatalf("got %v (asked=%v), want our stanza found and the PIN prompt's error", err, asked)
+	}
+}
+
 // For our own stanza the PIN is asked for first, before the card is opened
 // (Windows resets an idle card connection after ~5 s).
 func TestUnwrapOwnStanzaPromptsBeforeCard(t *testing.T) {

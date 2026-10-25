@@ -151,8 +151,11 @@ func (i *Identity) Unwrap(ss []*age.Stanza) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to compute tag: %v", err)
 		}
+		// Not ours: another p256tag recipient of the same file, such as a
+		// TPM. Keep looking, as age's own loop does; ErrIncorrectIdentity is
+		// for when no stanza matches at all.
 		if subtle.ConstantTimeCompare(tagArg, expTag[:4]) != 1 {
-			return nil, age.ErrIncorrectIdentity
+			continue
 		}
 
 		// The stanza is ours. Ask for the PIN before opening the card: on
