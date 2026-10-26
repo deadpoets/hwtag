@@ -200,8 +200,9 @@ $(printf '%s\n' "$bad" | sed 's/^/             /')"
 ok "CI is green on $short ($(printf '%s\n' "$runs" | wc -l | tr -d ' ') check runs)"
 
 # ---------------------------------------------------------------------------
-# Local build and tests. CI runs on Linux; the release is cut on the
-# maintainer's machine, so this is also the Windows run of the same commit.
+# Local build and tests. CI tests on Linux and Windows, but its runners have
+# no TPM or YubiKey; the maintainer's machine has both, so the same commit is
+# tested again here, where the hardware run happens.
 # ---------------------------------------------------------------------------
 
 printf '  ...   tests with the TPM simulator and the race detector\n'
