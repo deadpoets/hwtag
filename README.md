@@ -70,12 +70,6 @@ age -d -i tpm-identity.txt secret.age                 # decrypt: asks for the PI
 The identity file holds the key wrapped by the TPM. It is useless on any
 other TPM, but keep it: nothing can recover it from the TPM.
 
-A wrong PIN is refused by the TPM (`TPM_RC_AUTH_FAIL`) and counts toward
-the TPM's dictionary-attack lockout. On Windows, TBS also locks a standard
-(non-elevated) user out after 4 authorization failures, for the "standard
-user lockout duration" (8 hours by default), for every TPM key of that user,
-PIN-less ones included. Budget wrong-PIN attempts accordingly.
-
 On Windows the parent key is the persistent storage root key Windows
 provisions at `0x81000001`, so clearing the TPM (`tpm.msc`) destroys every
 identity made on that machine. Linux uses upstream's path unchanged
@@ -108,6 +102,36 @@ run back to back. The card is held exclusively while the plugin runs. Its
 security state outlives the process (piv-go disconnects without a reset),
 which is one reason the policies are *always*; unplug and replug the key
 after `--setup` or `--generate`.
+
+## PINs and lockouts
+
+Both plugins ask for the PIN once per decryption and never retry it: a wrong
+PIN fails that decryption, and the hardware counts the attempt. The counters
+belong to the TPM and the YubiKey, not to hwtag, which can't reset them.
+
+**TPM.** `--pin` is optional. A key made without it is usable by any process
+that has the identity file and can reach that machine's TPM; the TPM binds
+the key to the machine, not to a person. Go callers that require a PIN
+should check `(*plugin.Identity).HasPIN()` when an identity is enrolled and
+refuse one without.
+
+A wrong PIN is refused by the TPM (`TPM_RC_AUTH_FAIL`) and counts toward
+the TPM's dictionary-attack lockout. On Windows, TBS also locks a standard
+(non-elevated) user out after 4 authorization failures, for the "standard
+user lockout duration" (8 hours by default), for every TPM key of that user,
+PIN-less ones included. Budget wrong-PIN attempts accordingly.
+
+**YubiKey.** The key's PIN policy is *always*, so every decryption needs the
+PIN. `--setup` leaves the PIN with 3 retries and checks that it does; a
+correct PIN resets the count. After 3 wrong PINs in a row the PIN is
+blocked, and only the PUK unblocks it (for example `ykman piv access
+unblock-pin`). The PUK has its own retries (3 by default); once it is
+blocked too, the only way back is a PIV reset, which destroys the key and
+every file encrypted to it alone.
+
+Encrypt anything you can't afford to lose to a second recipient as well,
+such as a second YubiKey or a TPM, because a lockout or a lost device then
+costs a device, not the data.
 
 ## Security notes
 
