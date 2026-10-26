@@ -10,7 +10,7 @@ move in step.
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-10-25
+## [1.2.0] - 2026-10-26
 
 ### Added
 - `UnwrapInto(dst, stanzas)` on the p256tag identities (`plugin.TPMTagIdentity`,
