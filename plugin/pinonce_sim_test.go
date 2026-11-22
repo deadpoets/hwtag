@@ -8,8 +8,32 @@ import (
 	"testing"
 
 	"filippo.io/age"
+	"github.com/google/go-tpm/tpm2"
+	"github.com/google/go-tpm/tpm2/transport"
 	"github.com/google/go-tpm/tpm2/transport/simulator"
 )
+
+// lockoutCounter reads the TPM's count of failed authorizations
+// (TPM_PT_LOCKOUT_COUNTER), which is the budget a wrong PIN spends.
+func lockoutCounter(t *testing.T, tpm transport.TPM) uint32 {
+	t.Helper()
+	rsp, err := tpm2.GetCapability{
+		Capability:    tpm2.TPMCapTPMProperties,
+		Property:      uint32(tpm2.TPMPTLockoutCounter),
+		PropertyCount: 1,
+	}.Execute(tpm)
+	if err != nil {
+		t.Fatalf("reading the lockout counter: %v", err)
+	}
+	props, err := rsp.CapabilityData.Data.TPMProperties()
+	if err != nil {
+		t.Fatalf("reading the lockout counter: %v", err)
+	}
+	if len(props.TPMProperty) != 1 || props.TPMProperty[0].Property != tpm2.TPMPTLockoutCounter {
+		t.Fatal("the TPM did not return its lockout counter")
+	}
+	return props.TPMProperty[0].Value
+}
 
 // The README promises that a decryption asks for the PIN once and never
 // retries it: a wrong PIN costs one attempt of the TPM's dictionary-attack
@@ -19,6 +43,11 @@ import (
 // Every case hands the identity two stanzas that are both addressed to it,
 // which is the input that would make a retry loop show: the same file key
 // wrapped twice to the same recipient.
+//
+// Two things are counted. The PIN callbacks are what the user sees. The TPM's
+// own lockout counter is what the promise is about: code that asked once and
+// reused the PIN for the second stanza would still show one callback, but
+// would spend two attempts.
 func TestPINAskedOnce(t *testing.T) {
 	tpm, err := simulator.OpenSimulator()
 	if err != nil {
@@ -95,9 +124,13 @@ func TestPINAskedOnce(t *testing.T) {
 	for _, p := range paths {
 		t.Run(p.name+"/right PIN", func(t *testing.T) {
 			asked := 0
+			before := lockoutCounter(t, tpm)
 			got, err := p.unwrap(identity, func() ([]byte, error) { asked++; return pin, nil }, twice(t, p.recipient))
 			if err != nil {
 				t.Fatal(err)
+			}
+			if spent := lockoutCounter(t, tpm) - before; spent != 0 {
+				t.Fatalf("the right PIN spent %d lockout attempts, want 0", spent)
 			}
 			if !bytes.Equal(got, fileKey) {
 				t.Fatal("wrong file key")
@@ -111,9 +144,13 @@ func TestPINAskedOnce(t *testing.T) {
 		// PIN for the first.
 		t.Run(p.name+"/wrong PIN", func(t *testing.T) {
 			asked := 0
+			before := lockoutCounter(t, tpm)
 			_, err := p.unwrap(identity, func() ([]byte, error) { asked++; return []byte("654321"), nil }, twice(t, p.recipient))
 			if err == nil {
 				t.Fatal("wrong PIN accepted")
+			}
+			if spent := lockoutCounter(t, tpm) - before; spent != 1 {
+				t.Fatalf("a wrong PIN spent %d lockout attempts, want 1", spent)
 			}
 			if asked != 1 {
 				t.Fatalf("PIN asked for %d times after a wrong PIN, want 1", asked)
