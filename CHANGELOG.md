@@ -10,6 +10,12 @@ move in step.
 
 ## [Unreleased]
 
+### Changed
+- Pins: toolchain go1.27.3 to go1.27.4 (a Go security release, mostly
+  toolchain fixes), golang.org/x/crypto v0.58.0 to v0.59.0,
+  golang.org/x/sys v0.49.0 to v0.50.0, golang.org/x/term v0.47.0 to v0.48.0.
+  The `go 1.26.0` floor is unchanged.
+
 ## [1.2.0] - 2026-10-26
 
 ### Added
