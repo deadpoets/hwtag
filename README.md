@@ -105,9 +105,10 @@ after `--setup` or `--generate`.
 
 ## PINs and lockouts
 
-Both plugins ask for the PIN once per decryption and never retry it: a wrong
-PIN fails that decryption, and the hardware counts the attempt. The counters
-belong to the TPM and the YubiKey, not to hwtag, which can't reset them.
+Both plugins ask for the PIN, when the key has one, once per decryption and
+never retry it: a wrong PIN fails that decryption, and the hardware counts
+the attempt. The counters belong to the TPM and the YubiKey, not to hwtag,
+which can't reset them.
 
 **TPM.** `--pin` is optional. A key made without it is usable by any process
 that has the identity file and can reach that machine's TPM; the TPM binds
@@ -121,13 +122,13 @@ the TPM's dictionary-attack lockout. On Windows, TBS also locks a standard
 user lockout duration" (8 hours by default), for every TPM key of that user,
 PIN-less ones included. Budget wrong-PIN attempts accordingly.
 
-**YubiKey.** The key's PIN policy is *always*, so every decryption needs the
-PIN. `--setup` leaves the PIN with 3 retries and checks that it does; a
-correct PIN resets the count. After 3 wrong PINs in a row the PIN is
-blocked, and only the PUK unblocks it (for example `ykman piv access
-unblock-pin`). The PUK has its own retries (3 by default); once it is
-blocked too, the only way back is a PIV reset, which destroys the key and
-every file encrypted to it alone.
+**YubiKey.** The key's PIN and touch policies are both *always*, so every
+decryption needs the PIN and a touch. `--setup` leaves the PIN with 3
+retries and checks that it does; a correct PIN resets the count. After 3
+wrong PINs in a row the PIN is blocked, and only the PUK unblocks it (for
+example `ykman piv access unblock-pin`). The PUK has its own retries (3 by
+default); once it is blocked too, the only way back is a PIV reset, which
+destroys the key and every file encrypted to it alone.
 
 Encrypt anything you can't afford to lose to a second recipient as well,
 such as a second YubiKey or a TPM, because a lockout or a lost device then
